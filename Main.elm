@@ -149,7 +149,7 @@ addPiece model row column =
 
 addPieceToBoard : Board -> Piece -> Int -> Int -> Board
 addPieceToBoard board piece row column =  
-  let oldRow = getDefault row Empty board
+  let oldRow = getDefault row (fromList [Empty]) board
       newRow = Array.set column piece oldRow
   in
   Array.set row newRow board
