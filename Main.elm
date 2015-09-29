@@ -20,7 +20,10 @@ import Signal exposing (..)
 import String exposing (toInt, fromChar)
 import Char exposing (fromCode)
 
---Types--
+----- Types -----
+
+
+
 type Piece = Red | Black | Empty
 
 type alias Board = Array (Array Piece)
@@ -64,23 +67,36 @@ blankBoard = Array.repeat height (Array.repeat width Empty)
 
 view : Model -> Element
 view model =
-  let board = [bg] ++ circles
+  let board = [bg] ++ pieces model.board
   in
   collage (truncate boardWidth) boardHeight board  
 
+-- Draw Pieces --
+pieces : Board -> List Form
+pieces board =
+  let formBoard = toList board |> List.indexedMap (\rowNum row -> 
+                    toList row |> List.indexedMap (\colNum piece -> 
+                      (drawPiece piece (toFloat rowNum) (toFloat colNum)) 
+                    )
+                  )
+  in
+    formBoard |> concatMap identity
+
+drawPiece : Piece -> Float -> Float -> Form
+drawPiece piece row column =
+  let color = case piece of
+                Red -> Color.red
+                Black -> Color.black
+                Empty -> Color.white
+  in drawCircle color row column
+
 -- Draw the background --
 bg = 
-  rect boardWidth boardHeight |> filled blue
-
-circles : List Form
-circles = [0..height-1] |> concatMap intoRows 
-
-intoRows : Float -> List Form
-intoRows row = [0..width-1] |> List.map (drawCircle row)  
+  rect boardWidth boardHeight |> filled blue 
 
 -- Draw Circles --
-drawCircle : Float -> Float -> Form
-drawCircle row column = circle pieceSize |> filled white |> move (translate column row)
+drawCircle : Color -> Float -> Float -> Form
+drawCircle color row column = circle pieceSize |> filled color |> move (translate column row)
 
 translate : Float -> Float -> (Float,Float)
 translate column row =
@@ -110,14 +126,14 @@ update keyCode model =
               |> toInt 
   in 
   case key of
-      Ok value -> addToColumn model value
+      Ok value -> addToColumn model (value - 1)
       Err msg -> model
 
 addToColumn : Model -> Int -> Model
 addToColumn model col = 
-  let row = if col > width
-            then Nothing 
-            else lowestEmptyRow model.board col
+  let row = if | col > width -> Nothing 
+               | not (model.win == Empty) -> Nothing --don't add piece if game is over
+               | otherwise -> lowestEmptyRow model.board col
   in 
   case row of
     Just value -> addPiece model value col
@@ -125,8 +141,7 @@ addToColumn model col =
 
 lowestEmptyRow : Board -> Int -> Maybe Int
 lowestEmptyRow board col = 
-  board |> Array.map (get col) 
-        |> Array.map (Maybe.withDefault Empty) 
+  board |> Array.map (getWithDefault col Empty) 
         |> emptyIndex  
 
 emptyIndex : Array Piece -> Maybe Int
@@ -144,22 +159,56 @@ addPiece model row column =
   in 
   { board = newBoard  
   , turn = opponent model.turn
-  , win = Empty  
+  , win = checkWin newBoard model.turn
   } 
 
 addPieceToBoard : Board -> Piece -> Int -> Int -> Board
 addPieceToBoard board piece row column =  
-  let oldRow = getDefault row (fromList [Empty]) board
+  let oldRow = getWithDefault row (fromList [Empty]) board
       newRow = Array.set column piece oldRow
   in
   Array.set row newRow board
   
-getDefault : Int -> a -> Array a -> a
-getDefault index default array =
+getWithDefault : Int -> a -> Array a -> a
+getWithDefault index default array =
   array |> get index |> Maybe.withDefault default
 
 opponent : Piece -> Piece
 opponent piece = if piece == Red then Black else Red
+
+checkWin : Board -> Piece -> Piece
+checkWin board piece =
+  if (checkWinHorizontal board piece) || (checkWinVertical board piece)
+  then piece
+  else Empty
+
+checkWinHorizontal : Board -> Piece -> Bool
+checkWinHorizontal board piece =
+  checkNested board piece 
+
+checkNested : Board -> Piece -> Bool
+checkNested board piece =
+  board |> Array.foldl (\row win -> if win == True 
+                                    then True 
+                                    else checkWinArray row piece) False
+
+checkWinArray : Array Piece -> Piece -> Bool
+checkWinArray array piece = 
+  let count = array |> Array.foldl (\p count -> if | count == 4 -> 4
+                                                   | p == piece -> count + 1
+                                                   | otherwise -> 0) 0
+  in
+  count == 4
+
+checkWinVertical : Board -> Piece -> Bool
+checkWinVertical board piece =
+  let columns = fromList [0..width] |> Array.map (getColumn board)
+  in
+  checkNested columns piece
+
+getColumn : Board -> Int -> Array Piece
+getColumn board col = 
+  board |> Array.map (getWithDefault col Empty)
 
 ----- Main -----
 
@@ -168,8 +217,4 @@ main = view <~ gameState
 
 gameState : Signal Model
 gameState = foldp update startingModel Keyboard.presses
-
---Keyboard.presses
---update : Int -> Element
---update keyCode = (draw board [] [])
 
