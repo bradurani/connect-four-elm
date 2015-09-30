@@ -22,8 +22,6 @@ import Char exposing (fromCode)
 
 ----- Types -----
 
-
-
 type Piece = Red | Black | Empty
 
 type alias Board = Array (Array Piece)
@@ -33,6 +31,13 @@ type alias Model =
   , turn : Piece
   , win : Piece  
   } 
+
+--Minimax types
+type ColumnChoice = Int | None
+type alias PotentialMove =
+  { column : ColumnChoice
+  , score : Float
+  }
 
 -----Constants-----
 
@@ -50,6 +55,8 @@ availableHeight = boardHeight - (2 * padding) - 2 * pieceSize
 
 availableWidth : Float
 availableWidth = boardWidth - (2 * padding) - 2 * pieceSize
+
+minimaxLookAhead = 4
 
 -----Initial State-----
 
@@ -120,34 +127,44 @@ translateY row =
 
 update : Int -> Model -> Model
 update keyCode model =
-  let key = keyCode 
+  if not (model.win == Empty) then model --don't add piece if game is over
+  else updateKeyPress keyCode model
+
+updateKeyPress : Int -> Model -> Model
+updateKeyPress keyCode model =
+  let col = keyCode 
               |> fromCode
               |> fromChar
               |> toInt 
-  in 
-  case key of
-      Ok value -> addToColumn model (value - 1)
-      Err msg -> model
+  in
+  case col of
+    Err string -> model
+    Ok col -> takeTurn model col
 
-addToColumn : Model -> Int -> Model
-addToColumn model col = 
-  let row = if | col > width -> Nothing 
-               | not (model.win == Empty) -> Nothing --don't add piece if game is over
-               | otherwise -> lowestEmptyRow model.board col
+takeTurn : Model -> Int -> Model
+takeTurn model col =
+  let row = rowIfCanAddColumn model.board col
   in 
   case row of
-    Just value -> addPiece model value col
-    Nothing -> model
+      Just row -> addPiece model row col
+      Nothing -> model
+
+rowIfCanAddColumn : Board -> Int -> Maybe Int
+rowIfCanAddColumn board col = 
+  if | col > width -> Nothing 
+     | otherwise -> lowestEmptyRow board col
 
 lowestEmptyRow : Board -> Int -> Maybe Int
 lowestEmptyRow board col = 
-  board |> Array.map (getWithDefault col Empty) 
+  board |> Array.map (getWithDefault col Empty) --replace with col method
         |> emptyIndex  
 
 emptyIndex : Array Piece -> Maybe Int
 emptyIndex column = 
   let count = column |> 
-              Array.foldl (\index item -> if index == Empty then item + 1 else item) 0
+              Array.foldl (\index item -> 
+                if index == Empty then item + 1 else item
+              ) 0
   in
   case count of
     0 -> Nothing
@@ -209,6 +226,86 @@ checkWinVertical board piece =
 getColumn : Board -> Int -> Array Piece
 getColumn board col = 
   board |> Array.map (getWithDefault col Empty)
+
+----- Minimax -------
+
+minimax : Board -> Piece -> Int
+minimax board piece = 1
+--  (evaluatePosition board 0 piece piece)
+
+--evaluatePosition : Board -> Int -> Piece -> PotentialMove
+--evaluatePosition board depth evaluatingPiece movingPiece =
+--  let score = positionScore board evaluatingPiece
+--  in
+--  if | not (score == 0) -> move None score
+--     | depth > maxDepth -> move column score
+--     | otherwise -> bestMove board depth evaluatingPiece movingPiece
+
+--bestMove : Board -> Int -> Piece -> PotentialMove
+--bestMove board piece board depth evaluatingPiece movingPiece =
+--  let possibleNexts = possibleNextMoves board movingPiece
+--      possibleMoves = possibleNexts |> map (\newBoard -> 
+--        evaluatePosition newBoard depth + 1 evaluatingPiece opponent(movingPiece)
+--      )
+--  in
+--  case length possibleMoves of
+--    0 -> score None 0
+--    otherwise ->  possibleMoves |> maxBy (\move -> abs move.score )
+
+--possibleNextMoves : Board -> Piece
+--possibleNextMoves board movingPiece =
+--  [0..width - 1] |> map 
+
+--positionScore : Board -> Piece -> Float
+--positionScore board piece int =
+--  let opponent = opponent piece
+--  let evaluatingPieceIfWon = checkWin board piece
+--  let opponentPieceIfWon = checkWin board opponent
+--  in
+--  if | evaluatingPieceIfWon == piece -> 1
+--     | opponentPieceIfWon == opponent -> -1
+--     | otherwise -> 0
+
+--move Int | None -> Float -> PotentialMove
+--move col score =
+--  { column = col
+--    score = score
+--  }
+
+--maxBy : (a -> comparable) -> List a -> Maybe a
+--maxBy f list =
+--  list |> foldl (\item max ->
+--    case max of
+--      Nothing -> item
+--      Just value -> if |(f value) > (f item) -> max
+--                       |(f value) == (f item) -> max
+--                       |(f value) < (f item) -> item
+--  ) Nothing
+----def minimax(board, max_depth = 3, depth = 0, active_piece = 'R', moving_piece = 'R')
+----  position_score = position_score(board, active_piece)
+----  return position_score if position_score != 0
+----  return 0 if depth > max_depth
+----  positions = possible_next_boards(board, moving_piece).map do |board| 
+----    minimax(board, max_depth, depth + 1, active_piece, opponent(moving_piece))
+----  end
+----  return 0 if positions.empty?
+----  positions.max_by { |score| score.abs }
+----end
+
+----def position(board, score)
+----  {
+----    board: board,
+----    score: score
+----  }
+----end
+
+----def possible_next_boards(board, piece)
+----  Hamster.interval(0, board.first.length - 1).map do |n|
+----    add_piece_to_column(board, n, piece)
+----  end.compact
+----end
+
+
 
 ----- Main -----
 
