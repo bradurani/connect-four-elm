@@ -19,6 +19,7 @@ import Keyboard
 import Signal exposing (..)
 import String exposing (toInt, fromChar)
 import Char exposing (fromCode)
+import Maybe exposing (andThen)
 
 ----- Types -----
 
@@ -35,7 +36,7 @@ type alias Model =
 --Minimax types
 type ColumnChoice = Int | None
 type alias PotentialMove =
-  { column : ColumnChoice
+  { column : Maybe Int
   , score : Float
   }
 
@@ -128,26 +129,38 @@ translateY row =
 update : Int -> Model -> Model
 update keyCode model =
   if not (model.win == Empty) then model --don't add piece if game is over
-  else updateKeyPress keyCode model
+  else
+    let playerTurnResult = takeTurnPlayer keyCode model
+    in
+    case playerTurnResult of
+      Nothing -> model --illegal move
+      Just model -> if not (model.win == Empty)
+                    then model --player wins
+                    else case takeTurnComputer model of
+                           Nothing -> model --full board tie
+                           Just model -> model
 
-updateKeyPress : Int -> Model -> Model
-updateKeyPress keyCode model =
-  let col = keyCode 
-              |> fromCode
-              |> fromChar
-              |> toInt 
+takeTurnPlayer : Int -> Model -> Maybe Model
+takeTurnPlayer keyCode model =
+  let keyNum = keyNumber keyCode
   in
-  case col of
-    Err string -> model
-    Ok col -> takeTurn model col
+  case keyNum of
+    Err string -> Nothing
+    Ok keyNum -> takeTurnIfValid model (keyNum - 1)
 
-takeTurn : Model -> Int -> Model
-takeTurn model col =
+keyNumber : Int -> Result String Int
+keyNumber keyCode =
+  keyCode |> fromCode
+          |> fromChar 
+          |> toInt 
+  
+takeTurnIfValid : Model -> Int -> Maybe Model
+takeTurnIfValid model col =
   let row = rowIfCanAddColumn model.board col
   in 
   case row of
-      Just row -> addPiece model row col
-      Nothing -> model
+      Just row -> Just (addPiece model row col)
+      Nothing -> Nothing
 
 rowIfCanAddColumn : Board -> Int -> Maybe Int
 rowIfCanAddColumn board col = 
@@ -170,14 +183,14 @@ emptyIndex column =
     0 -> Nothing
     otherwise -> Just (count - 1)
 
-addPiece : Model -> Int -> Int -> Model
+addPiece : Model -> Int -> Int -> Model --use tuple
 addPiece model row column = 
   let newBoard = addPieceToBoard model.board model.turn row column
   in 
   { board = newBoard  
   , turn = opponent model.turn
   , win = checkWin newBoard model.turn
-  } 
+  }
 
 addPieceToBoard : Board -> Piece -> Int -> Int -> Board
 addPieceToBoard board piece row column =  
@@ -227,60 +240,79 @@ getColumn : Board -> Int -> Array Piece
 getColumn board col = 
   board |> Array.map (getWithDefault col Empty)
 
------ Minimax -------
+----- Computer -------
 
-minimax : Board -> Piece -> Int
-minimax board piece = 1
---  (evaluatePosition board 0 piece piece)
+takeTurnComputer : Model -> Maybe Model
+takeTurnComputer model =
+  let col = minimax model.board model.turn
+  in
+  col `andThen` getRow model
 
---evaluatePosition : Board -> Int -> Piece -> PotentialMove
---evaluatePosition board depth evaluatingPiece movingPiece =
---  let score = positionScore board evaluatingPiece
---  in
---  if | not (score == 0) -> move None score
---     | depth > maxDepth -> move column score
---     | otherwise -> bestMove board depth evaluatingPiece movingPiece
+getRow : Model -> Int -> Maybe Model
+getRow model col =
+  (lowestEmptyRow model.board col) `andThen` (\row -> Just (addPiece model row col))
 
---bestMove : Board -> Int -> Piece -> PotentialMove
---bestMove board piece board depth evaluatingPiece movingPiece =
---  let possibleNexts = possibleNextMoves board movingPiece
---      possibleMoves = possibleNexts |> map (\newBoard -> 
---        evaluatePosition newBoard depth + 1 evaluatingPiece opponent(movingPiece)
---      )
---  in
---  case length possibleMoves of
---    0 -> score None 0
---    otherwise ->  possibleMoves |> maxBy (\move -> abs move.score )
+minimax : Board -> Piece -> Maybe Int
+minimax board piece = 
+  let potentialMove = evaluatePosition board 0 piece piece
+  in potentialMove `andThen` (.column)
 
---possibleNextMoves : Board -> Piece
---possibleNextMoves board movingPiece =
---  [0..width - 1] |> map 
+evaluatePosition : Board -> Int -> Piece -> Piece -> Maybe PotentialMove
+evaluatePosition board depth evaluatingPiece movingPiece =
+  let score = positionScore board evaluatingPiece
+  in
+  if | not (score == 0) -> potentialMove Nothing score
+     | depth > minimaxLookAhead -> potentialMove Nothing score
+     | otherwise -> bestMove board depth evaluatingPiece movingPiece
 
---positionScore : Board -> Piece -> Float
---positionScore board piece int =
---  let opponent = opponent piece
---  let evaluatingPieceIfWon = checkWin board piece
---  let opponentPieceIfWon = checkWin board opponent
---  in
---  if | evaluatingPieceIfWon == piece -> 1
---     | opponentPieceIfWon == opponent -> -1
---     | otherwise -> 0
+bestMove : Board -> Int -> Piece -> Maybe PotentialMove
+bestMove board piece board depth evaluatingPiece movingPiece =
+  let possibleNexts = possibleNextMoves board movingPiece
+      possibleMoves = [
+        { column = Just 2
+        ,  score = 1
+        },
+        { column = Nothing
+        , score = 0
+        }
+      ]
+      --possibleMoves = possibleNexts |> map (\newBoard -> 
+      --  evaluatePosition newBoard (depth + 1) evaluatingPiece (opponent movingPiece)
+      --)
+  in
+  possibleMoves |> maxBy (\move -> abs move.score)
 
---move Int | None -> Float -> PotentialMove
---move col score =
---  { column = col
---    score = score
---  }
+possibleNextMoves : Board -> Piece
+possibleNextMoves board movingPiece =
+  [0..width - 1] |> map (\col ->
 
---maxBy : (a -> comparable) -> List a -> Maybe a
---maxBy f list =
---  list |> foldl (\item max ->
---    case max of
---      Nothing -> item
---      Just value -> if |(f value) > (f item) -> max
---                       |(f value) == (f item) -> max
---                       |(f value) < (f item) -> item
---  ) Nothing
+  ) 
+
+positionScore : Board -> Piece -> Float
+positionScore board piece =
+  let nextPiece = opponent piece
+      pieceIfWon = checkWin board piece
+      nextPieceIfWon = checkWin board nextPiece
+  in
+  if | pieceIfWon == piece -> 1
+     | nextPieceIfWon == nextPiece -> -1
+     | otherwise -> 0
+
+potentialMove : Maybe Int -> Float -> Maybe PotentialMove
+potentialMove col score =
+  Just { column = col
+       , score = score
+       }
+
+maxBy : (a -> comparable) -> List a -> Maybe a
+maxBy f list =
+  list |> foldl (\item max ->
+    case max of
+      Nothing -> item
+      Just value -> if |(f value) > (f item) -> max
+                       |(f value) == (f item) -> max
+                       |(f value) < (f item) -> item
+  ) Nothing
 ----def minimax(board, max_depth = 3, depth = 0, active_piece = 'R', moving_piece = 'R')
 ----  position_score = position_score(board, active_piece)
 ----  return position_score if position_score != 0
