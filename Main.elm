@@ -20,6 +20,8 @@ import Signal exposing (..)
 import String exposing (toInt, fromChar)
 import Char exposing (fromCode)
 import Maybe exposing (andThen)
+import Random exposing (..)
+import Time exposing (millisecond)
 
 ----- Types -----
 
@@ -30,15 +32,8 @@ type alias Board = Array (Array Piece)
 type alias Model = 
   { board : Board
   , turn : Piece
-  , win : Piece  
+  , win : Piece 
   } 
-
---Minimax types
-type ColumnChoice = Int | None
-type alias PotentialMove =
-  { column : Maybe Int
-  , score : Float
-  }
 
 -----Constants-----
 
@@ -57,7 +52,7 @@ availableHeight = boardHeight - (2 * padding) - 2 * pieceSize
 availableWidth : Float
 availableWidth = boardWidth - (2 * padding) - 2 * pieceSize
 
-minimaxLookAhead = 4
+minimaxLookAhead = 6
 
 -----Initial State-----
 
@@ -70,6 +65,15 @@ startingModel =
 
 blankBoard : Board
 blankBoard = Array.repeat height (Array.repeat width Empty)
+
+----- Util ----
+
+(?) : Maybe a -> a -> a
+(?) maybe default =
+  Maybe.withDefault default maybe
+
+infixr 9 ?
+
 
 ----- View -----
 
@@ -224,9 +228,12 @@ checkNested board piece =
 
 checkWinArray : Array Piece -> Piece -> Bool
 checkWinArray array piece = 
-  let count = array |> Array.foldl (\p count -> if | count == 4 -> 4
-                                                   | p == piece -> count + 1
-                                                   | otherwise -> 0) 0
+  let count = array |> 
+                Array.foldl (\p count -> 
+                  if | count == 4 -> 4
+                     | p == piece -> count + 1
+                     | otherwise -> 0
+                 ) 0                  
   in
   count == 4
 
@@ -243,101 +250,58 @@ getColumn board col =
 ----- Computer -------
 
 takeTurnComputer : Model -> Maybe Model
-takeTurnComputer model =
-  let col = minimax model.board model.turn
+takeTurnComputer model = 
+  evaluatePosition model 0
+
+evaluatePosition : Model -> Int -> Maybe Model
+evaluatePosition model depth =
+  if | not (model.win == Empty) -> Just model
+     | depth == minimaxLookAhead -> Just model
+     | otherwise -> bestMove model depth
+
+bestMove : Model -> Int -> Maybe Model
+bestMove model depth =
+  let possibleNexts = possibleNextMoves model
+      endingPositions = possibleNexts  
+                          |> List.map (\m -> (m, evaluatePosition m (depth + 1)))
+                          |> filterNothingModelTuples
   in
-  col `andThen` getRow model
+  endingPositions |> winner model.turn |> Maybe.map fst
 
-getRow : Model -> Int -> Maybe Model
-getRow model col =
-  (lowestEmptyRow model.board col) `andThen` (\row -> Just (addPiece model row col))
+possibleNextMoves : Model -> List Model
+possibleNextMoves model =
+  [0..width - 1] |> List.map (takeTurnIfValid model)
+                 |> filterNothingModels
 
-minimax : Board -> Piece -> Maybe Int
-minimax board piece = 
-  let potentialMove = evaluatePosition board 0 piece piece
-  in potentialMove `andThen` (.column)
+winner : Piece -> List (Model, Model) -> Maybe (Model, Model)
+winner piece list =
+  let f p = List.filter(snd >> .win >> (==) p)
+      winners = list |> f piece  
+      losers = list |> f (opponent piece)
+      draws = list |> f Empty
+  in 
+  if |List.length winners > 0 -> head winners
+     |List.length draws > 0 -> head draws
+     |List.length losers > 0 -> head losers
+     |otherwise -> Nothing --draw, board full
 
-evaluatePosition : Board -> Int -> Piece -> Piece -> Maybe PotentialMove
-evaluatePosition board depth evaluatingPiece movingPiece =
-  let score = positionScore board evaluatingPiece
-  in
-  if | not (score == 0) -> potentialMove Nothing score
-     | depth > minimaxLookAhead -> potentialMove Nothing score
-     | otherwise -> bestMove board depth evaluatingPiece movingPiece
+filterNothingModels : List (Maybe Model) -> List Model
+filterNothingModels list =
+  list |> List.filter ((==) Nothing >> not)
+       |> List.map (\m -> m ? startingModel)
 
-bestMove : Board -> Int -> Piece -> Maybe PotentialMove
-bestMove board piece board depth evaluatingPiece movingPiece =
-  let possibleNexts = possibleNextMoves board movingPiece
-      possibleMoves = [
-        { column = Just 2
-        ,  score = 1
-        },
-        { column = Nothing
-        , score = 0
-        }
-      ]
-      --possibleMoves = possibleNexts |> map (\newBoard -> 
-      --  evaluatePosition newBoard (depth + 1) evaluatingPiece (opponent movingPiece)
-      --)
-  in
-  possibleMoves |> maxBy (\move -> abs move.score)
+filterNothingModelTuples : List ((Model, Maybe Model)) -> List (Model, Model)
+filterNothingModelTuples list =
+  list |> List.filter (snd >> (==) Nothing >> not)
+       |> List.map (\t -> (fst t, (snd t) ? startingModel))
 
-possibleNextMoves : Board -> Piece
-possibleNextMoves board movingPiece =
-  [0..width - 1] |> map (\col ->
+--sample : List a -> a
+--sample list = 
+  
 
-  ) 
-
-positionScore : Board -> Piece -> Float
-positionScore board piece =
-  let nextPiece = opponent piece
-      pieceIfWon = checkWin board piece
-      nextPieceIfWon = checkWin board nextPiece
-  in
-  if | pieceIfWon == piece -> 1
-     | nextPieceIfWon == nextPiece -> -1
-     | otherwise -> 0
-
-potentialMove : Maybe Int -> Float -> Maybe PotentialMove
-potentialMove col score =
-  Just { column = col
-       , score = score
-       }
-
-maxBy : (a -> comparable) -> List a -> Maybe a
-maxBy f list =
-  list |> foldl (\item max ->
-    case max of
-      Nothing -> item
-      Just value -> if |(f value) > (f item) -> max
-                       |(f value) == (f item) -> max
-                       |(f value) < (f item) -> item
-  ) Nothing
-----def minimax(board, max_depth = 3, depth = 0, active_piece = 'R', moving_piece = 'R')
-----  position_score = position_score(board, active_piece)
-----  return position_score if position_score != 0
-----  return 0 if depth > max_depth
-----  positions = possible_next_boards(board, moving_piece).map do |board| 
-----    minimax(board, max_depth, depth + 1, active_piece, opponent(moving_piece))
-----  end
-----  return 0 if positions.empty?
-----  positions.max_by { |score| score.abs }
-----end
-
-----def position(board, score)
-----  {
-----    board: board,
-----    score: score
-----  }
-----end
-
-----def possible_next_boards(board, piece)
-----  Hamster.interval(0, board.first.length - 1).map do |n|
-----    add_piece_to_column(board, n, piece)
-----  end.compact
-----end
-
-
+--newRand : Int
+--newRand min max seed =
+--  generate (int min max) (initialSeed (milliseconds ))
 
 ----- Main -----
 
