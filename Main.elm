@@ -52,7 +52,7 @@ availableHeight = boardHeight - (2 * padding) - 2 * pieceSize
 availableWidth : Float
 availableWidth = boardWidth - (2 * padding) - 2 * pieceSize
 
-minimaxLookAhead = 6
+minimaxLookAhead = 4
 
 -----Initial State-----
 
