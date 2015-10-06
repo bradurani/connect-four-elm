@@ -8,6 +8,8 @@
 --No design patterns
 --Change rows to count upwards
 
+--Change to use xs
+
 import Text exposing (..)
 import Color exposing (..)
 import Graphics.Element exposing (..)
@@ -15,7 +17,7 @@ import Graphics.Collage exposing (..)
 import Debug exposing (..)
 import List exposing (..)
 import Array exposing (..)
-import Keyboard
+import Mouse
 import Signal exposing (..)
 import String exposing (toInt, fromChar)
 import Char exposing (fromCode)
@@ -33,6 +35,7 @@ type alias Model =
   { board : Board
   , turn : Piece
   , win : Piece 
+  , seed : Seed
   } 
 
 -----Constants-----
@@ -44,15 +47,17 @@ padding = 20
 pieceSize = 40
 
 boardHeight = 700
-boardWidth = boardHeight * (width / height)
+boardWidth = boardHeight * (width // height)
 
-availableHeight : Float
+availableHeight : Int
 availableHeight = boardHeight - (2 * padding) - 2 * pieceSize
 
-availableWidth : Float
+availableWidth : Int
 availableWidth = boardWidth - (2 * padding) - 2 * pieceSize
 
-minimaxLookAhead = 4
+minimaxLookAhead = 5
+
+seedVal = 42
 
 -----Initial State-----
 
@@ -61,6 +66,7 @@ startingModel =
   { board = blankBoard
   , turn = Red
   , win = Empty
+  , seed = Random.initialSeed seedVal
   }
 
 blankBoard : Board
@@ -74,6 +80,9 @@ blankBoard = Array.repeat height (Array.repeat width Empty)
 
 infixr 9 ?
 
+randomInt : Int -> Seed -> (Int, Seed)
+randomInt max seed = 
+  generate (int 0 max) seed
 
 ----- View -----
 
@@ -81,20 +90,20 @@ view : Model -> Element
 view model =
   let board = [bg] ++ pieces model.board
   in
-  collage (truncate boardWidth) boardHeight board  
+  collage boardWidth boardHeight board  
 
 -- Draw Pieces --
 pieces : Board -> List Form
 pieces board =
   let formBoard = toList board |> List.indexedMap (\rowNum row -> 
                     toList row |> List.indexedMap (\colNum piece -> 
-                      (drawPiece piece (toFloat rowNum) (toFloat colNum)) 
+                      drawPiece piece rowNum colNum 
                     )
                   )
   in
     formBoard |> concatMap identity
 
-drawPiece : Piece -> Float -> Float -> Form
+drawPiece : Piece -> Int -> Int -> Form
 drawPiece piece row column =
   let color = case piece of
                 Red -> Color.red
@@ -104,59 +113,72 @@ drawPiece piece row column =
 
 -- Draw the background --
 bg = 
-  rect boardWidth boardHeight |> filled blue 
+  rect (toFloat boardWidth) (toFloat boardHeight) |> filled blue 
 
 -- Draw Circles --
-drawCircle : Color -> Float -> Float -> Form
-drawCircle color row column = circle pieceSize |> filled color |> move (translate column row)
+drawCircle : Color -> Int -> Int -> Form
+drawCircle color row column = 
+  let coords = translate column row
+      floatCoords = (toFloat (fst coords), toFloat (snd coords))
+  in
+  circle pieceSize |> filled color |> move floatCoords
 
-translate : Float -> Float -> (Float,Float)
+translate : Int -> Int -> (Int,Int)
 translate column row =
     (translateX column,translateY row)
 
-translateX : Float -> Float
+translateX : Int -> Int
 translateX column = 
-  let startLeft = -(availableWidth / 2)
-      gap = availableWidth / (width - 1)
+  let startLeft = -(availableWidth // 2)
+      gap = availableWidth // (width - 1)
   in 
   startLeft + (column * gap)
 
-translateY : Float -> Float
+translateY : Int -> Int
 translateY row = 
-  let startTop = availableHeight / 2
-      gap = availableHeight / (height - 1)
+  let startTop = availableHeight // 2
+      gap = availableHeight // (height - 1)
   in
   startTop - (row * gap)
 
 ----- Update -----
 
-update : Int -> Model -> Model
-update keyCode model =
+update : (Int, Int) -> Model -> Model
+update mousePosition model =
   if not (model.win == Empty) then model --don't add piece if game is over
   else
-    let playerTurnResult = takeTurnPlayer keyCode model
+    let playerTurnResult = takeTurnPlayer mousePosition model
     in
     case playerTurnResult of
       Nothing -> model --illegal move
-      Just model -> if not (model.win == Empty)
-                    then model --player wins
-                    else case takeTurnComputer model of
-                           Nothing -> model --full board tie
-                           Just model -> model
+      Just model -> 
+        if not (model.win == Empty)
+                then model --player wins
+                else case takeTurnComputer model of
+                       Nothing -> model --full board tie
+                       Just model -> model
 
-takeTurnPlayer : Int -> Model -> Maybe Model
-takeTurnPlayer keyCode model =
-  let keyNum = keyNumber keyCode
+columnNumber : (Int, Int) -> Maybe Int
+columnNumber position = 
+  let x = fst position
+      y = snd position
+  in 
+  if | x < 0 || x > boardWidth -> Nothing
+     | y < 0 || y > boardHeight -> Nothing
+     | otherwise -> Just (translateMouseCol x)
+
+translateMouseCol : Int -> Int
+translateMouseCol x =
+  let delta = boardWidth // width
+  in x // delta
+
+takeTurnPlayer : (Int, Int) -> Model -> Maybe Model
+takeTurnPlayer mousePosition model =
+  let col = columnNumber mousePosition
   in
-  case keyNum of
-    Err string -> Nothing
-    Ok keyNum -> takeTurnIfValid model (keyNum - 1)
-
-keyNumber : Int -> Result String Int
-keyNumber keyCode =
-  keyCode |> fromCode
-          |> fromChar 
-          |> toInt 
+  case col of
+    Nothing -> Nothing
+    Just col -> takeTurnIfValid model col
   
 takeTurnIfValid : Model -> Int -> Maybe Model
 takeTurnIfValid model col =
@@ -191,9 +213,11 @@ addPiece : Model -> Int -> Int -> Model --use tuple
 addPiece model row column = 
   let newBoard = addPieceToBoard model.board model.turn row column
   in 
-  { board = newBoard  
-  , turn = opponent model.turn
-  , win = checkWin newBoard model.turn
+  {
+    model | 
+    board <- newBoard
+  , turn <- opponent model.turn
+  , win <- checkWin newBoard model.turn
   }
 
 addPieceToBoard : Board -> Piece -> Int -> Int -> Board
@@ -251,7 +275,10 @@ getColumn board col =
 
 takeTurnComputer : Model -> Maybe Model
 takeTurnComputer model = 
-  evaluatePosition model 0
+  let lookAheadModel = evaluatePosition model 0
+  in
+  Maybe.map (resetWin model.turn) lookAheadModel --the algorithm marks a win even if it's several moves ahead
+                                                  --so we need to reset it to Empty so play continues
 
 evaluatePosition : Model -> Int -> Maybe Model
 evaluatePosition model depth =
@@ -265,25 +292,30 @@ bestMove model depth =
       endingPositions = possibleNexts  
                           |> List.map (\m -> (m, evaluatePosition m (depth + 1)))
                           |> filterNothingModelTuples
+                          |> List.map (\m -> copyWin m)
   in
-  endingPositions |> winner model.turn |> Maybe.map fst
+  endingPositions |> winner model.turn model.seed |> Maybe.map fst
 
 possibleNextMoves : Model -> List Model
 possibleNextMoves model =
   [0..width - 1] |> List.map (takeTurnIfValid model)
                  |> filterNothingModels
 
-winner : Piece -> List (Model, Model) -> Maybe (Model, Model)
-winner piece list =
+winner : Piece -> Seed -> List (Model, Model) -> Maybe (Model, Model)
+winner piece seed list =
   let f p = List.filter(snd >> .win >> (==) p)
       winners = list |> f piece  
       losers = list |> f (opponent piece)
       draws = list |> f Empty
   in 
-  if |List.length winners > 0 -> head winners
-     |List.length draws > 0 -> head draws
-     |List.length losers > 0 -> head losers
+  if |List.length winners > 0 -> Just (sampleModelTuple winners seed)
+     |List.length draws > 0 -> Just (sampleModelTuple draws seed)
+     |List.length losers > 0 -> Just (sampleModelTuple losers seed)
      |otherwise -> Nothing --draw, board full
+
+copyWin : (Model, Model) -> (Model, Model)
+copyWin (a, b) =
+  ({ a | win <- b.win}, b) 
 
 filterNothingModels : List (Maybe Model) -> List Model
 filterNothingModels list =
@@ -295,13 +327,27 @@ filterNothingModelTuples list =
   list |> List.filter (snd >> (==) Nothing >> not)
        |> List.map (\t -> (fst t, (snd t) ? startingModel))
 
---sample : List a -> a
---sample list = 
-  
+resetWin : Piece -> Model -> Model
+resetWin piece lookAheadModel =
+  let win = checkWin lookAheadModel.board piece
+  in
+  if win == piece 
+  then lookAheadModel
+  else { lookAheadModel | win <- Empty }
 
---newRand : Int
---newRand min max seed =
---  generate (int min max) (initialSeed (milliseconds ))
+sampleModelTuple : List (Model, Model) -> Seed -> (Model, Model)
+sampleModelTuple list seed =
+  let ((a, b), newSeed) = sample list seed (startingModel, startingModel)
+  in ({ a | seed <- newSeed},
+      { b | seed <- newSeed})
+
+sample : List a -> Seed -> a -> (a, Seed)
+sample list seed default =
+  let rand = randomInt ((List.length list) - 1) seed
+      val = (get (fst rand) (fromList list)) ? default
+  in
+  (val, (snd rand))
+  
 
 ----- Main -----
 
@@ -309,5 +355,5 @@ main : Signal Element
 main = view <~ gameState
 
 gameState : Signal Model
-gameState = foldp update startingModel Keyboard.presses
+gameState = foldp update startingModel (sampleOn Mouse.clicks Mouse.position)
 
