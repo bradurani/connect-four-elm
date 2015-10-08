@@ -36,6 +36,7 @@ type alias Model =
   , turn : Piece
   , win : Piece 
   , seed : Seed
+  , moveNum : Int
   } 
 
 -----Constants-----
@@ -55,7 +56,7 @@ availableHeight = boardHeight - (2 * padding) - 2 * pieceSize
 availableWidth : Int
 availableWidth = boardWidth - (2 * padding) - 2 * pieceSize
 
-minimaxLookAhead = 5
+minimaxLookAhead = 3
 
 seedVal = 42
 
@@ -67,6 +68,7 @@ startingModel =
   , turn = Red
   , win = Empty
   , seed = Random.initialSeed seedVal
+  , moveNum = 0
   }
 
 blankBoard : Board
@@ -151,12 +153,14 @@ update mousePosition model =
     in
     case playerTurnResult of
       Nothing -> model --illegal move
-      Just model -> 
-        if not (model.win == Empty)
-                then model --player wins
-                else case takeTurnComputer model of
-                       Nothing -> model --full board tie
-                       Just model -> model
+      Just afterPlayerModel -> 
+        let newModel = Debug.watchSummary "model" .moveNum afterPlayerModel
+        in
+        if not (newModel.win == Empty)
+                then newModel --player wins
+                else case takeTurnComputer newModel of
+                       Nothing -> newModel --full board tie
+                       Just afterComputerModel -> afterComputerModel
 
 columnNumber : (Int, Int) -> Maybe Int
 columnNumber position = 
@@ -218,6 +222,7 @@ addPiece model row column =
     board <- newBoard
   , turn <- opponent model.turn
   , win <- checkWin newBoard model.turn
+  , moveNum <- model.moveNum + 1
   }
 
 addPieceToBoard : Board -> Piece -> Int -> Int -> Board
