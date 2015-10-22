@@ -24,16 +24,31 @@ availableWidth = screenWidth - (2 * padding) - 2 * pieceWidth
 screenWidth = 700 * (7 // 6)
 screenHeight = 700
 
+type alias State = { board : Board
+                   , turn : Piece
+                   , winner : Piece
+                   }
+
 type alias Board = Array (Array Piece)
 type Piece = Red | Black | Empty
+
 
 startingBoard : Board
 startingBoard = 
   Array.repeat height (Array.repeat width Empty)
 
-view : Board -> Element
-view board = 
-  collage screenWidth screenHeight ([bg] ++ (drawState board))
+startingState : State
+startingState =
+  { board = startingBoard
+  , turn = Red
+  , winner = Empty
+  }
+
+------VIEW--------
+
+view : State -> Element
+view state = 
+  collage screenWidth screenHeight ([bg] ++ (drawState state.board))
 
 drawState : Board -> List Form
 drawState board =
@@ -46,7 +61,11 @@ drawState board =
 
 drawPiece : Piece -> Int -> Int -> Form
 drawPiece piece row col =  
-  move (toFloat (translateX col), toFloat (translateY row)) (circle pieceWidth |> filled (pieceColor piece))
+  (drawCircle piece) |> move (toFloat (translateX col), toFloat (translateY row)) 
+
+drawCircle : Piece -> Form
+drawCircle piece =
+  (circle pieceWidth |> filled (pieceColor piece))
 
 pieceColor : Piece -> Color
 pieceColor piece = 
@@ -69,37 +88,137 @@ translateY row =
   in
   startTop - (row * columnHeight)
 
-addPiece : Board -> Piece -> Int -> Board
-addPiece board piece columnNum =
-  let row = board |> get 1 
-  in case row of
-    Nothing -> startingBoard
-    Just row -> let newRow = setPiece row columnNum piece
-                in board |> set 1 newRow 
-
-setPiece : Array Piece -> Int -> Piece -> Array Piece
-setPiece row columnNum piece=
-  row |> set columnNum piece
-
 bg : Form
 bg = 
   rect (toFloat screenWidth) (toFloat screenHeight) |> filled blue
 
-columnNum : Int -> Int
-columnNum x = 1
+---UPDATE LOOP MAIN LOGIC-----
 
-update : (Int,Int) -> Board -> Board
-update mousePos board =
-  let column = fst mousePos |> columnNum
-  in addPiece board Red column 
+update : (Int,Int) -> State -> State
+update mousePos state =
+  let maybeUpdatedBoard = updatePiece mousePos state.turn state.board
+  in case maybeUpdatedBoard of
+       Nothing -> state --illegal click or full column
+       Just newBoard -> { state | board <- newBoard
+                                , turn <- opponent state.turn 
+                                , winner <- detectWinner newBoard }
+
+opponent : Piece -> Piece
+opponent piece =
+  case piece of 
+    Red -> Black
+    Black -> Red
+
+
+updatePiece : (Int, Int) -> Piece -> Board -> Maybe Board
+updatePiece mousePos piece board =
+  let maybeColumn = mousePos |> columnNum
+  in case maybeColumn of
+  Nothing -> Nothing
+  Just columnNum -> Just (addPiece board piece columnNum)
+
+addPiece : Board -> Piece -> Int -> Board
+addPiece board piece columnNum =
+  let maybeRow = getBottomRow board columnNum
+  in case maybeRow of
+    Nothing -> startingBoard
+    Just rowNum -> board |> addPieceAt rowNum columnNum piece
+
+addPieceAt : Int -> Int -> Piece -> Board -> Board
+addPieceAt rowNum colNum piece board =
+  let row = unsafeGetArray rowNum board
+      newRow = setPiece row colNum piece
+  in board |> set rowNum newRow 
+
+setPiece : Array Piece -> Int -> Piece -> Array Piece
+setPiece row columnNum piece =
+  row |> set columnNum piece
+
+columnNum : (Int, Int) -> Maybe Int
+columnNum (x, y) =
+  let
+    validY = y > 0 && y <= screenHeight
+    validX = x > 0 && x <= screenWidth
+  in
+  if validX && validY 
+  then Just (colMap x)
+  else Nothing
+
+colMap : Int -> Int
+colMap mouseX =
+  let columnWidth = screenWidth // width
+  in (mouseX // columnWidth)
+
+getBottomRow : Board -> Int -> Maybe Int
+getBottomRow board columnNum =
+  let column = board |> Array.map (unsafeGetPiece columnNum)
+      sum = column |> Array.foldl (\piece sum -> if piece == Empty 
+                                                 then sum 
+                                                 else sum + 1) 0
+      row = (height - sum) - 1
+  in if row < 0 || row > (height - 1) 
+     then Nothing
+     else Just row
+
+unsafeGetArray : Int -> Board -> Array Piece
+unsafeGetArray index board =
+  let maybeArray = get index board
+  in case maybeArray of 
+     Nothing -> fromList []
+     Just a -> a
+
+unsafeGetPiece : Int -> Array Piece -> Piece
+unsafeGetPiece index array =
+  let maybeInt = get index array
+  in case maybeInt of 
+     Nothing -> Empty
+     Just i -> i
+
+detectWinner : Board -> Piece
+detectWinner board piece =
+  let winner = detectRowWinners board piece
+  in
+  if winner != Empty
+  then winner
+  else detectColumnWinners board piece
+
+detectRowWinners : Board -> Piece -> Piece
+detectRowWinners board piece =
+  board |> fold (\row winner -> let rowWinner = detectArrayWinners row piece
+                                in
+                                if (rowWinner == Empty)
+                                then winner
+                                else rowWinner) Empty
+
+detectColumnWinners : Board -> Piece -> Piece
+detectColumnWinners board piece =
+  let columns = [0..width - 1] |> map (getColumn board) 
+  in
+  board |> fold (\row winner -> let rowWinner = detectArrayWinners row piece
+                                in
+                                if (rowWinner == Empty)
+                                then winner
+                                else rowWinner) Empty
+
+getColumn : Board -> Int -> Array Piece
+getColumn board columnNum =
+  board |> map (unsafeGet colNum)
+
+detectArrayWinners : Array Piece -> Piece -> Piece
+detectArrayWinners array piece =
+let count = array |> foldl (\p count -> if| count == 4 -> count
+                                           | piece == p -> count + 1
+                                           otherwise -> 0) 0
+in if count == 4
+   then piece
+   else Empty
+
+
+----GAME STATE----
+
+gameState : Signal State
+gameState = foldp update startingState (sampleOn Mouse.clicks Mouse.position)
 
 main : Signal Element
 main = view <~ gameState
-
-gameState : Signal Board
-gameState = foldp update startingBoard (sampleOn Mouse.clicks Mouse.position)
-
-
-
-
 
