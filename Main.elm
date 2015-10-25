@@ -282,10 +282,10 @@ checkWinVertical board piece =
 
 checkWinDiagonal : Board -> Piece -> Bool
 checkWinDiagonal board piece =
-     (checkNested (log "ydr" (yDiagonalsDownRight board)) piece) 
-  || (checkNested (log "xdr" (xDiagonalsDownRight board)) piece)
-  || (checkNested (log "ydl" (yDiagonalsDownLeft board)) piece)
-  || (checkNested (log "xdl" (xDiagonalsDownLeft board)) piece)
+     (checkNested ((yDiagonalsDownRight board)) piece) 
+  || (checkNested ((xDiagonalsDownRight board)) piece)
+  || (checkNested ((yDiagonalsDownLeft board)) piece)
+  || (checkNested ((xDiagonalsDownLeft board)) piece)
 
 yDiagonalsDownRight : Board -> Board
 yDiagonalsDownRight board =
