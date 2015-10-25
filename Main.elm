@@ -58,7 +58,7 @@ availableWidth = boardWidth - (2 * padding) - 2 * pieceSize
 
 minimaxLookAhead = 3
 
-seedVal = 42
+seedVal = 43
 
 -----Initial State-----
 
@@ -147,7 +147,8 @@ translateY row =
 
 update : (Int, Int) -> Model -> Model
 update mousePosition model =
-  if not (model.win == Empty) then model --don't add piece if game is over
+  if not (model.win == Empty) 
+  then model --don't add piece if game is over
   else
     let playerTurnResult = takeTurnPlayer mousePosition model
     in
@@ -157,10 +158,10 @@ update mousePosition model =
         let newModel = Debug.watchSummary "model" .moveNum afterPlayerModel
         in
         if not (newModel.win == Empty)
-                then newModel --player wins
-                else case takeTurnComputer newModel of
-                       Nothing -> newModel --full board tie
-                       Just afterComputerModel -> afterComputerModel
+        then newModel --player wins
+        else case takeTurnComputer newModel of
+               Nothing -> newModel --full board tie
+               Just afterComputerModel -> afterComputerModel
 
 columnNumber : (Int, Int) -> Maybe Int
 columnNumber position = 
@@ -236,12 +237,19 @@ getWithDefault : Int -> a -> Array a -> a
 getWithDefault index default array =
   array |> get index |> Maybe.withDefault default
 
+getFromBoard : Int -> Int -> Board -> Piece
+getFromBoard rowNum columnNum board =
+  let row = getWithDefault columnNum (fromList [Empty]) board
+  in getWithDefault rowNum Empty row
+
 opponent : Piece -> Piece
 opponent piece = if piece == Red then Black else Red
 
 checkWin : Board -> Piece -> Piece
 checkWin board piece =
-  if (checkWinHorizontal board piece) || (checkWinVertical board piece)
+  if (checkWinHorizontal board piece) 
+  || (checkWinVertical board piece) 
+  || (checkWinDiagonal board piece)
   then piece
   else Empty
 
@@ -271,6 +279,48 @@ checkWinVertical board piece =
   let columns = fromList [0..width] |> Array.map (getColumn board)
   in
   checkNested columns piece
+
+checkWinDiagonal : Board -> Piece -> Bool
+checkWinDiagonal board piece =
+     (checkNested (log "ydr" (yDiagonalsDownRight board)) piece) 
+  || (checkNested (log "xdr" (xDiagonalsDownRight board)) piece)
+  || (checkNested (log "ydl" (yDiagonalsDownLeft board)) piece)
+  || (checkNested (log "xdl" (xDiagonalsDownLeft board)) piece)
+
+yDiagonalsDownRight : Board -> Board
+yDiagonalsDownRight board =
+  fromList [0..height - 1] |> 
+    Array.map (\y -> diagonal (+) 0 y board)
+
+xDiagonalsDownRight : Board -> Board
+xDiagonalsDownRight board =
+  fromList [0..width - 1] |> 
+    Array.map (\x -> diagonal (+) x 0 board)
+
+yDiagonalsDownLeft : Board -> Board
+yDiagonalsDownLeft board =
+  fromList [0..height - 1] |> 
+    Array.map (\y -> diagonal (-) (width - 1) y board)
+
+xDiagonalsDownLeft : Board -> Board
+xDiagonalsDownLeft board =
+  fromList [0..width - 1] |> 
+    Array.map (\x -> diagonal (-) x 0 board)
+
+diagonal : (Int -> Int -> Int) -> Int -> Int -> Board -> Array Piece
+diagonal operator x y board =
+  let startingRecord = { array = fromList []
+                       , n = 0 }
+      record = board |> Array.foldl (\row results ->
+                                      if x < 0 || x >= width || y < 0 || y >= height
+                                      then results
+                                      else
+                                      { results |
+                                        array <- push (getFromBoard (x `operator` results.n) (y + results.n) board) results.array
+                                      , n <- results.n + 1 }) startingRecord
+  in record.array
+
+
 
 getColumn : Board -> Int -> Array Piece
 getColumn board col = 
