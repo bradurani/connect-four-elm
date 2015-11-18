@@ -7,9 +7,7 @@ Originally prepared for my talk at RubyConf 2015. the slides for which are [here
 I also live coded this program on Livecoding TV.
 
 The livecoding videocasts are here:
-[https://www.livecoding.tv/bradurani/videos/](https://www.livecoding.tv/bradurani/videos/)<br/>
-<br/>
+[https://www.livecoding.tv/bradurani/videos/](https://www.livecoding.tv/bradurani/videos/)  
 
-<br/>
  The complete finished program is in branch `master`
  The portions done in the LiveCoding sessions are in branches `part-1` and `part-2`
