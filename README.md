@@ -9,5 +9,6 @@ I also live coded this program on Livecoding TV.
 The livecoding videocasts are here:
 [https://www.livecoding.tv/bradurani/videos/](https://www.livecoding.tv/bradurani/videos/)  
 
- The complete finished program is in branch `master`
- The portions done in the LiveCoding sessions are in branches `part-1` and `part-2`
+ The complete finished program is in branch `master`.
+ 
+ The portions done during the Livecoding sessions are in branches `part-1` and `part-2`
