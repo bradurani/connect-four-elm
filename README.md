@@ -1,6 +1,6 @@
 <h1>Connect Four in Elm</h1>
 
-Connect Four implementation in Elm, with mouse imput, and an unbeatable computer AI.
+Connect Four implementation in Elm, with mouse input, and an unbeatable computer AI.
 <br/>
 Prepared for a live coding demo for Livecoding TV.
 </h1>
