@@ -2,11 +2,14 @@
 
 Connect Four implementation in Elm, with mouse input, and an unbeatable computer AI.
 <br/>
-Prepared for a live coding demo for Livecoding TV.
-</h1>
+Originally prepared for my talk at RubyConf 2015. the slides for which are [here](https://docs.google.com/presentation/d/12bTdNvRrAbfFLe03r4lUY2g12nuveNYaJeC9szCN2uQ)
+
+I also live coded this program on Livecoding TV.
+
 The livecoding videocasts are here:
 [https://www.livecoding.tv/bradurani/videos/](https://www.livecoding.tv/bradurani/videos/)<br/>
 <br/>
- Part 2 is coming soon.
+
 <br/>
- The finished program is branch `master` and code completed in part 1 is in branch `part-1`
+ The complete finished program is in branch `master`
+ The portions done in the LiveCoding sessions are in branches `part-1` and `part-2`
