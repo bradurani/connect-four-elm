@@ -31,13 +31,13 @@ type Piece = Red | Black | Empty
 
 type alias Board = Array (Array Piece)
 
-type alias Model = 
+type alias Model =
   { board : Board
   , turn : Piece
-  , win : Piece 
+  , win : Piece
   , seed : Seed
   , moveNum : Int
-  } 
+  }
 
 -----Constants-----
 
@@ -165,12 +165,16 @@ update mousePosition model =
 
 columnNumber : (Int, Int) -> Maybe Int
 columnNumber position = 
-  let x = fst position
-      y = snd position
+  let
+    x = fst position
+    y = snd position
   in 
-  if | x < 0 || x > boardWidth -> Nothing
-     | y < 0 || y > boardHeight -> Nothing
-     | otherwise -> Just (translateMouseCol x)
+    if x < 0 || x > boardWidth then
+      Nothing
+    else if y < 0 || y > boardHeight then
+      Nothing
+    else
+      Just (translateMouseCol x)
 
 translateMouseCol : Int -> Int
 translateMouseCol x =
@@ -195,8 +199,10 @@ takeTurnIfValid model col =
 
 rowIfCanAddColumn : Board -> Int -> Maybe Int
 rowIfCanAddColumn board col = 
-  if | col > width -> Nothing 
-     | otherwise -> lowestEmptyRow board col
+  if col > width then
+    Nothing
+  else
+    lowestEmptyRow board col
 
 lowestEmptyRow : Board -> Int -> Maybe Int
 lowestEmptyRow board col = 
@@ -216,15 +222,16 @@ emptyIndex column =
 
 addPiece : Model -> Int -> Int -> Model --use tuple
 addPiece model row column = 
-  let newBoard = addPieceToBoard model.board model.turn row column
-  in 
-  {
-    model | 
-    board <- newBoard
-  , turn <- opponent model.turn
-  , win <- checkWin newBoard model.turn
-  , moveNum <- model.moveNum + 1
-  }
+  let
+    newBoard = addPieceToBoard model.board model.turn row column
+  in
+    {
+      model | 
+      board = newBoard
+    , turn = opponent model.turn
+    , win = checkWin newBoard model.turn
+    , moveNum = model.moveNum + 1
+    }
 
 addPieceToBoard : Board -> Piece -> Int -> Int -> Board
 addPieceToBoard board piece row column =  
@@ -265,12 +272,16 @@ checkNested board piece =
 
 checkWinArray : Array Piece -> Piece -> Bool
 checkWinArray array piece = 
-  let count = array |> 
-                Array.foldl (\p count -> 
-                  if | count == 4 -> 4
-                     | p == piece -> count + 1
-                     | otherwise -> 0
-                 ) 0                  
+  let
+      count = array |>
+                Array.foldl (\p count ->
+                  if count == 4 then
+                     4
+                  else if p == piece then
+                     count + 1
+                  else
+                     0
+                 ) 0
   in
   count == 4
 
@@ -316,8 +327,8 @@ diagonal operator x y board =
                                       then results
                                       else
                                       { results |
-                                        array <- push (getFromBoard (x `operator` results.n) (y + results.n) board) results.array
-                                      , n <- results.n + 1 }) startingRecord
+                                        array = push (getFromBoard (x `operator` results.n) (y + results.n) board) results.array
+                                      , n = results.n + 1 }) startingRecord
   in record.array
 
 
@@ -337,9 +348,12 @@ takeTurnComputer model =
 
 evaluatePosition : Model -> Int -> Maybe Model
 evaluatePosition model depth =
-  if | not (model.win == Empty) -> Just model
-     | depth == minimaxLookAhead -> Just model
-     | otherwise -> bestMove model depth
+  if not (model.win == Empty) then
+     Just model
+  else if depth == minimaxLookAhead then
+     Just model
+  else
+     bestMove model depth
 
 bestMove : Model -> Int -> Maybe Model
 bestMove model depth =
@@ -363,14 +377,18 @@ winner piece seed list =
       losers = list |> f (opponent piece)
       draws = list |> f Empty
   in 
-  if |List.length winners > 0 -> Just (sampleModelTuple winners seed)
-     |List.length draws > 0 -> Just (sampleModelTuple draws seed)
-     |List.length losers > 0 -> Just (sampleModelTuple losers seed)
-     |otherwise -> Nothing --draw, board full
+  if List.length winners > 0 then
+     Just (sampleModelTuple winners seed)
+  else if List.length draws > 0 then
+     Just (sampleModelTuple draws seed)
+  else if List.length losers > 0 then
+     Just (sampleModelTuple losers seed)
+  else
+     Nothing --draw, board full
 
 copyWin : (Model, Model) -> (Model, Model)
 copyWin (a, b) =
-  ({ a | win <- b.win}, b) 
+  ({ a | win = b.win}, b) 
 
 filterNothingModels : List (Maybe Model) -> List Model
 filterNothingModels list =
@@ -388,13 +406,13 @@ resetWin piece lookAheadModel =
   in
   if win == piece 
   then lookAheadModel
-  else { lookAheadModel | win <- Empty }
+  else { lookAheadModel | win = Empty }
 
 sampleModelTuple : List (Model, Model) -> Seed -> (Model, Model)
 sampleModelTuple list seed =
   let ((a, b), newSeed) = sample list seed (startingModel, startingModel)
-  in ({ a | seed <- newSeed},
-      { b | seed <- newSeed})
+  in ({ a | seed = newSeed},
+      { b | seed = newSeed})
 
 sample : List a -> Seed -> a -> (a, Seed)
 sample list seed default =
@@ -407,7 +425,7 @@ sample list seed default =
 ----- Main -----
 
 main : Signal Element
-main = view <~ gameState
+main = Signal.map view gameState
 
 gameState : Signal Model
 gameState = foldp update startingModel (sampleOn Mouse.clicks Mouse.position)
