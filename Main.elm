@@ -41,11 +41,11 @@ type alias Model =
 
 -----Constants-----
 
-width = 7
-height = 6
+width = 9
+height = 4
 
 padding = 20
-pieceSize = 40
+pieceSize = 60
 
 boardHeight = 700
 boardWidth = boardHeight * (width // height)
@@ -56,7 +56,7 @@ availableHeight = boardHeight - (2 * padding) - 2 * pieceSize
 availableWidth : Int
 availableWidth = boardWidth - (2 * padding) - 2 * pieceSize
 
-minimaxLookAhead = 3
+minimaxLookAhead = 4
 
 seedVal = 43
 
@@ -108,7 +108,7 @@ pieces board =
 drawPiece : Piece -> Int -> Int -> Form
 drawPiece piece row column =
   let color = case piece of
-                Red -> Color.red
+                Red -> Color.green 
                 Black -> Color.black
                 Empty -> Color.white
   in drawCircle color row column
